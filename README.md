@@ -1,3 +1,9 @@
+## Modified RECIPE to prifile with pmperf
+We had added profiling code to the ycsb benchmark in RECIPE. This version of RECIPE requires [pmperf](https://github.com/oslab-swrc/pmperf) to build.
+
+
+See ORIGINAL README below.
+
 ## RECIPE : Converting Concurrent DRAM Indexes to Persistent-Memory Indexes (SOSP 2019)
 
 RECIPE proposes a principled approach for converting concurrent indexes built for DRAM into crash-consistent indexes for persistent memory. This repository includes the implementations of the index structures for persistent memory converted from the existing concurrent DRAM indexes by following RECIPE. For performance evaluations, this repository also provides the microbenchmarks for index structures based on YCSB. This repository contains all the information needed to reproduce the main results from our paper.

@@ -1,12 +1,16 @@
 #include <iostream>
 #include <chrono>
 #include <random>
+#include <string>
 #include <cstring>
 #include <vector>
 #include <fstream>
 #include <iostream>
 #include <stdlib.h>
 #include "tbb/tbb.h"
+
+#include <sched.h>
+#include "pmperf.h"
 
 using namespace std;
 
@@ -27,6 +31,10 @@ using namespace std;
 #endif
 
 using namespace wangziqi2013::bwtree;
+
+PmPerf * monitor;
+#define LOAD_RESULT_FILE "load.pmperf"
+#define RUN_RESULT_FILE "run.pmperf"
 
 // index types
 enum {
@@ -738,7 +746,7 @@ void ycsb_load_run_randint(int index_type, int wl, int kt, int ap, int num_threa
         count++;
     }
 
-    fprintf(stderr, "Loaded %d keys\n", count);
+    fprintf(stderr, "Loaded %d keys for Load\n", count);
 
     std::ifstream infile_txn(txn_file);
 
@@ -768,6 +776,8 @@ void ycsb_load_run_randint(int index_type, int wl, int kt, int ap, int num_threa
         }
         count++;
     }
+
+    fprintf(stderr, "Loaded %d keys for Run\n", count);
 
     std::atomic<int> range_complete, range_incomplete;
     range_complete.store(0);
@@ -1107,24 +1117,31 @@ void ycsb_load_run_randint(int index_type, int wl, int kt, int ap, int num_threa
         clht_gc_destroy(hashtable);
     } else if (index_type == TYPE_FASTFAIR) {
         fastfair::btree *bt = new fastfair::btree();
-
         {
             // Load
+            monitor->before();
             auto starttime = std::chrono::system_clock::now();
             tbb::parallel_for(tbb::blocked_range<uint64_t>(0, LOAD_SIZE), [&](const tbb::blocked_range<uint64_t> &scope) {
+                monitor->used_core(sched_getcpu());
                 for (uint64_t i = scope.begin(); i != scope.end(); i++) {
                     bt->btree_insert(init_keys[i], (char *) &init_keys[i]);
                 }
             });
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::system_clock::now() - starttime);
-            printf("Throughput: load, %f ,ops/us\n", (LOAD_SIZE * 1.0) / duration.count());
+            monitor->after();
+            cerr << "Throughput: load, " << (LOAD_SIZE * 1.0) / duration.count() << " ,ops/us" << endl;
+            monitor->add_external("Throughput", (LOAD_SIZE * 1.0) / duration.count());
+            monitor->export_diff(LOAD_RESULT_FILE);
         }
 
         {
             // Run
+            monitor->clear();
+            monitor->before();
             auto starttime = std::chrono::system_clock::now();
             tbb::parallel_for(tbb::blocked_range<uint64_t>(0, RUN_SIZE), [&](const tbb::blocked_range<uint64_t> &scope) {
+                monitor->used_core(sched_getcpu());
                 for (uint64_t i = scope.begin(); i != scope.end(); i++) {
                     if (ops[i] == OP_INSERT) {
                         bt->btree_insert(keys[i], (char *) &keys[i]);
@@ -1148,7 +1165,10 @@ void ycsb_load_run_randint(int index_type, int wl, int kt, int ap, int num_threa
             });
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::system_clock::now() - starttime);
-            printf("Throughput: run, %f ,ops/us\n", (RUN_SIZE * 1.0) / duration.count());
+            monitor->after();
+            cerr<< "Throughput: run, " << (LOAD_SIZE * 1.0) / duration.count() << " ,ops/us" << endl;
+            monitor->add_external("Throughput", (LOAD_SIZE * 1.0) / duration.count());
+            monitor->export_diff(RUN_RESULT_FILE);
         }
     } else if (index_type == TYPE_LEVELHASH) {
         Hash *table = new LevelHashing(10);
@@ -1362,6 +1382,9 @@ int main(int argc, char **argv) {
 
     int num_thread = atoi(argv[5]);
     tbb::task_scheduler_init init(num_thread);
+
+    monitor = new PmPerf();
+    monitor->pmm_program();
 
     if (kt != STRING_KEY) {
         std::vector<uint64_t> init_keys;
