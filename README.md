@@ -1,4 +1,4 @@
-## Modified RECIPE to prifile with pmperf
+## Modified RECIPE to profile with pmperf
 We had added profiling code to the ycsb benchmark in RECIPE. This version of RECIPE requires [pmperf](https://github.com/oslab-swrc/pmperf) to build.
 
 
